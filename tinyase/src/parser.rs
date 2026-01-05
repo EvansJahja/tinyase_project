@@ -3,10 +3,12 @@
 
 // use nom_derive::*;
 use alloc::vec::Vec;
+use thiserror::Error;
 // use zerocopy_derive::*;  
 // use zerocopy::{FromBytes, KnownLayout, Immutable};  
 use zerocopy::*;
 // use nom::{IResult, Parser, bytes::complete::{tag, take}, number::complete::{le_u16, le_u32, u8} };
+use core::convert::Infallible;
 
 #[derive(Debug, FromBytes, KnownLayout, Immutable)]
 #[repr(packed)]
@@ -79,9 +81,6 @@ pub struct ASEFrame {
     duration: u16,
     _reserved: [u8; 2],
     num_chunks: u32,
-//     // #[nom(Count="num_chunks")]
-//     // pub chunks: Vec<ASEChunk<'a>>,
-//     pub chunks: [ASEChunk<'a>; 200],
 }
 
 // #[derive(NomLE, Debug)]
@@ -113,25 +112,60 @@ pub struct ASEFrame {
 //     }
 // }
 
+#[derive(Error, Debug)]
+enum HeaderParseError {
+    #[error("Cast error")]
+    CastError,
+}
 
-fn parse_header<'a>(input: &'a [u8]) -> Result<(&'a ASEHeader, &'a [u8]), CastError<&'a[u8], ASEHeader>> {
-    let (header, rest) = ASEHeader::ref_from_prefix(&input)?;
+fn parse_header<'a>(input: &'a [u8]) -> Result<(&'a ASEHeader, &'a [u8]), HeaderParseError> {
+    let (header, rest) = ASEHeader::ref_from_prefix(&input).map_err(|_| HeaderParseError::CastError)?;
 
     Ok((header, rest))
 }
 
-fn parse_frames<'a>(header: &'a ASEHeader, input: &'a [u8]) -> Result<(&'a ASEFrame, &'a [u8]), CastError<&'a [u8], ASEFrame>> {
-    // let (frames, rest) = ASEFrame::ref_from_prefix(&input)?;
-    let (frame, rest) = ASEFrame::ref_from_prefix(&input)?;
+
+#[derive(Error, Debug)]
+enum FrameParseError {
+    #[error("Cast error")]
+    CastError,
+    #[error("Invalid magic number: {0}")]
+    InvalidMagic(u16),
+}
+fn parse_frame<'a>(input: &'a [u8]) -> Result<(&'a ASEFrame, &'a [u8]), FrameParseError> {
+    let (frame, rest) = ASEFrame::ref_from_prefix(&input)
+        .map_err(|_| FrameParseError::CastError)?;
+    if frame._magic != 0xF1FA {
+        return Err(FrameParseError::InvalidMagic(frame._magic));
+    }
 
     Ok((frame, rest))
 }
 
+#[derive(Debug, FromBytes, KnownLayout, Immutable)]
+#[repr(packed)]
+struct ASEChunkHeader {
+    pub size: u32,
+    pub chunk_type: u16,
+}
+
+#[derive(Error, Debug, Clone)]
+enum ChunkHeaderParseError {
+    #[error("Cast error")]
+    CastError,
+}
+
+fn parse_chunk_header<'a>(input: &'a [u8]) -> Result<(&'a ASEChunkHeader, &'a [u8]), ChunkHeaderParseError> {
+    let (chunk, rest) = ASEChunkHeader::ref_from_prefix(&input)
+        .map_err(|_| ChunkHeaderParseError::CastError)?;
+
+    Ok((chunk, rest))
+}
+
 pub fn testparse(input: &[u8]) -> u16 {
     let (header, rest) = parse_header(input).unwrap();
-    let (frame, rest) = parse_frames(header, rest).unwrap();
+    let (frame, rest) = parse_frame(rest).unwrap();
     frame._magic
-
 }
 
 // pub fn parse_header(input: &'_ [u8]) -> nom::IResult<&'_ [u8], ASEHeader<'_>> {
@@ -149,6 +183,29 @@ pub fn testparse(input: &[u8]) -> u16 {
 
 //     ASE::parse(input)
 // }
+
+pub trait NextResult<'a> {
+    type Output;
+    type Error;
+    fn next(&'a self) -> Result<(Self::Output, &'a [u8]), Self::Error>;
+}
+
+impl<'a> NextResult<'a> for Result<(&'a ASEChunkHeader, &'a [u8]), ChunkHeaderParseError> {
+    type Output = &'a ASEChunkHeader;
+    type Error = ChunkHeaderParseError;
+    // We need to check current size, and return a new result with updated slice
+    fn next(&'a self) -> Result<(Self::Output, &'a [u8]), Self::Error> {
+        match self {
+            Ok((chunk, rest)) => {
+                let ofs : usize = (chunk.size - 6) as usize;
+                let next_chunk_start = &rest[ofs..];
+                parse_chunk_header(next_chunk_start)
+            },
+            Err(e) => Err(e.clone()),
+        }
+    }
+
+}
 
 
 #[cfg(test)]
@@ -170,11 +227,14 @@ mod test {
         let a = std::fs::read("tests/anim_idle.ase").unwrap();
         let (header, rest) = parse_header(&a).unwrap();
 
-        let (frame , rest) = parse_frames(header, rest).unwrap();
+        let (frame , rest) = parse_frame(rest).unwrap();
+
+        let z  = parse_chunk_header(rest);
+        let (chunk , rest) = z.next().unwrap();
 
         // let (rest, ase) = ASE::parse(&a).unwrap();
         // println!("{:#x?}, rest: {}", ase, rest.len());
-        println!("{:#x?}", frame);
+        println!("{:#x?}", chunk);
 
 
     }
