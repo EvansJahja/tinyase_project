@@ -7,7 +7,7 @@ edition = "2024"
 compression = { version = "0.1.5", features = ["zlib"], default-features = false, path = 'C:\Users\EvansGrace02\Documents\Workspace\rust-compression' }
 nom = { version = "8.0.0", default-features = false, features = ["alloc"] }
 nom-derive = { version = "0.11.0", git = "https://github.com/rust-bakery/nom-derive.git", default-features = false, features = ["alloc"] }
-zerocopy = "0.8.31"
+zerocopy = { version = "0.8.31", features = ["derive"] }
 zerocopy-derive = "0.8.31"
 
 [dev-dependencies]

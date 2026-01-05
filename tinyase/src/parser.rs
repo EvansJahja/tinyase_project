@@ -1,16 +1,18 @@
 
-use nom::{bytes::complete::take, combinator::{self, rest, success, value}, multi::{length_data, length_value}, number::complete::{le_u16, le_u32}};
+// use nom::{bytes::complete::take, combinator::{self, rest, success, value}, multi::{length_data, length_value}, number::complete::{le_u16, le_u32}};
 
-use nom_derive::*;
+// use nom_derive::*;
 use alloc::vec::Vec;
+// use zerocopy_derive::*;  
+// use zerocopy::{FromBytes, KnownLayout, Immutable};  
+use zerocopy::*;
 // use nom::{IResult, Parser, bytes::complete::{tag, take}, number::complete::{le_u16, le_u32, u8} };
 
-#[derive(Debug)]
-#[derive(NomLE)]
-pub struct ASEHeader<'a> {
+#[derive(Debug, FromBytes, KnownLayout, Immutable)]
+#[repr(packed)]
+pub struct ASEHeader {
     pub filesize: u32,
-    #[nom(Tag(b"\xE0\xA5"))]
-    _magic: &'a[u8],
+    _magic: u16,
     pub frames: u16,
     pub width: u16,
     pub height: u16,
@@ -60,73 +62,93 @@ pub struct ASEHeader<'a> {
 //     }))
 // }
 
-#[derive(NomLE, Debug)]
-pub struct ASE<'a> {
-    pub header: ASEHeader<'a>,
-    #[nom(Count="header.frames as usize")]
-    pub frames: Vec<ASEFrame<'a>>,
-}
+// #[derive(NomLE, Debug)]
+// pub struct ASE<'a> {
+//     pub header: ASEHeader<'a>,
+//     #[nom(Count="header.frames as usize")]
+//     pub frames: Vec<ASEFrame<'a>>,
+// }
 
-#[derive(NomLE, Debug)]
-pub struct ASEFrame<'a> {
+// #[derive(NomLE, Debug)]
+#[derive(Debug, FromBytes, KnownLayout, Immutable)]
+#[repr(packed)]
+pub struct ASEFrame {
     num_bytes: u32,
-    #[nom(Tag(b"\xfa\xf1"))]
-    _magic: &'a[u8],
+    _magic: u16,
     old_unused: u16,
     duration: u16,
     _reserved: [u8; 2],
     num_chunks: u32,
-    // #[nom(Count="num_chunks")]
-    // pub chunks: Vec<ASEChunk<'a>>,
-    pub chunks: [ASEChunk<'a>; 200],
+//     // #[nom(Count="num_chunks")]
+//     // pub chunks: Vec<ASEChunk<'a>>,
+//     pub chunks: [ASEChunk<'a>; 200],
 }
 
-#[derive(NomLE, Debug)]
-pub struct ASEChunk<'a> {
-    pub size: u32,
-    pub chunk_type: u16,
-    // #[nom(Count="size as usize - 6")]
-    // data: Vec<u8>
-    #[nom(Parse = "(|i| parse_chunk_data(i, chunk_type, size))")]  
-    chunk_data: ChunkData<'a>,
+// #[derive(NomLE, Debug)]
+// pub struct ASEChunk<'a> {
+//     pub size: u32,
+//     pub chunk_type: u16,
+//     // #[nom(Count="size as usize - 6")]
+//     // data: Vec<u8>
+//     #[nom(Parse = "(|i| parse_chunk_data(i, chunk_type, size))")]  
+//     chunk_data: ChunkData<'a>,
+
+// }
+
+// #[derive(Debug)]
+// enum ChunkData<'a> {
+//     Unknown(&'a[u8]),
+// }
+
+
+// fn parse_chunk_data(input: &[u8], chunk_type: u16, size: u32) -> nom::IResult<&[u8], ChunkData> {
+//     match chunk_type {
+//         _ => {
+//             // let (input, data) = combinator::rest(input)?;
+//             // Ok((input, ChunkData::Unknown(data.to_vec())))
+//             // take (size as usize - 6usize)(input)
+//             let (input, data) = take(size as usize - 6usize)(input)?;
+//             Ok((input, ChunkData::Unknown(data)))
+//         }
+//     }
+// }
+
+
+fn parse_header<'a>(input: &'a [u8]) -> Result<(&'a ASEHeader, &'a [u8]), CastError<&'a[u8], ASEHeader>> {
+    let (header, rest) = ASEHeader::ref_from_prefix(&input)?;
+
+    Ok((header, rest))
+}
+
+fn parse_frames<'a>(header: &'a ASEHeader, input: &'a [u8]) -> Result<(&'a ASEFrame, &'a [u8]), CastError<&'a [u8], ASEFrame>> {
+    // let (frames, rest) = ASEFrame::ref_from_prefix(&input)?;
+    let (frame, rest) = ASEFrame::ref_from_prefix(&input)?;
+
+    Ok((frame, rest))
+}
+
+pub fn testparse(input: &[u8]) -> u16 {
+    let (header, rest) = parse_header(input).unwrap();
+    let (frame, rest) = parse_frames(header, rest).unwrap();
+    frame._magic
 
 }
 
-#[derive(Debug)]
-enum ChunkData<'a> {
-    Unknown(&'a[u8]),
-}
+// pub fn parse_header(input: &'_ [u8]) -> nom::IResult<&'_ [u8], ASEHeader<'_>> {
+//     ASEHeader::parse(input)
+// }
 
-
-fn parse_chunk_data(input: &[u8], chunk_type: u16, size: u32) -> nom::IResult<&[u8], ChunkData> {
-    match chunk_type {
-        _ => {
-            // let (input, data) = combinator::rest(input)?;
-            // Ok((input, ChunkData::Unknown(data.to_vec())))
-            // take (size as usize - 6usize)(input)
-            let (input, data) = take(size as usize - 6usize)(input)?;
-            Ok((input, ChunkData::Unknown(data)))
-        }
-    }
-}
-
-
-
-pub fn parse_header(input: &'_ [u8]) -> nom::IResult<&'_ [u8], ASEHeader<'_>> {
-    ASEHeader::parse(input)
-}
-
-pub fn parse_aseprite(input: &[u8]) -> nom::IResult<&[u8], ASE> {
-    let mut a = (
-        ASEHeader::parse,
-    );
-    let b = a.parse(input);
+// pub fn parse_aseprite(input: &[u8]) -> nom::IResult<&[u8], ASE> {
+//     let mut a = (
+//         ASEHeader::parse,
+//     );
+//     let b = a.parse(input);
 
 
 
 
-    ASE::parse(input)
-}
+//     ASE::parse(input)
+// }
 
 
 #[cfg(test)]
@@ -146,9 +168,13 @@ mod test {
     #[test]
     fn test_read() {
         let a = std::fs::read("tests/anim_idle.ase").unwrap();
+        let (header, rest) = parse_header(&a).unwrap();
 
-        let (rest, ase) = ASE::parse(&a).unwrap();
-        println!("{:#x?}, rest: {}", ase, rest.len());
+        let (frame , rest) = parse_frames(header, rest).unwrap();
+
+        // let (rest, ase) = ASE::parse(&a).unwrap();
+        // println!("{:#x?}, rest: {}", ase, rest.len());
+        println!("{:#x?}", frame);
 
 
     }
