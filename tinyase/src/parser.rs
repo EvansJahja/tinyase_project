@@ -11,6 +11,8 @@ use zerocopy::*;
 use core::convert::Infallible;
 use core::iter::Iterator;
 use core::ops::Index;
+use core::marker::PhantomData;
+use core::ops::Deref;
 
 #[derive(Debug, FromBytes, KnownLayout, Immutable)]
 #[repr(packed)]
@@ -88,12 +90,12 @@ pub struct ASEFrame {
 pub struct ASEFrameContainer<'a> (pub &'a ASEFrame, pub &'a [u8]);
 
 impl<'a> IntoIterator for ASEFrameContainer<'a> {
-    type Item = Result<(&'a ASEChunkHeader, &'a [u8]), ChunkHeaderParseError>;
+    type Item = ChunkPtr<'a>;
     type IntoIter = ChunkPtr<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
         ChunkPtr {
-            ptr: self.1 /* starting pointer to chunks */,
+            ptr: self.1,
             count: self.0.num_chunks as usize,
         }
     }
@@ -165,40 +167,17 @@ pub struct ASEChunkHeader {
     pub chunk_type: u16,
 }
 
+impl HasSize for &'_ ASEChunkHeader {
+    fn size(&self) -> usize {
+        self.size as usize
+    }
+}
+
 #[derive(Error, Debug, Clone)]
 pub enum ChunkHeaderParseError {
     #[error("Cast error")]
     CastError,
 }
-
-fn parse_chunk_header<'a>(input: &'a [u8]) -> Result<(&'a ASEChunkHeader, &'a [u8]), ChunkHeaderParseError> {
-    let (chunk, rest) = ASEChunkHeader::ref_from_prefix(&input)
-        .map_err(|_| ChunkHeaderParseError::CastError)?;
-
-    Ok((chunk, rest))
-}
-
-pub fn testparse(input: &[u8]) -> u16 {
-    let (header, rest) = parse_header(input).unwrap();
-    let ASEFrameContainer(frame, rest) = parse_frame(rest).unwrap();
-    frame._magic
-}
-
-// pub fn parse_header(input: &'_ [u8]) -> nom::IResult<&'_ [u8], ASEHeader<'_>> {
-//     ASEHeader::parse(input)
-// }
-
-// pub fn parse_aseprite(input: &[u8]) -> nom::IResult<&[u8], ASE> {
-//     let mut a = (
-//         ASEHeader::parse,
-//     );
-//     let b = a.parse(input);
-
-
-
-
-//     ASE::parse(input)
-// }
 
 pub trait NextResult<'a> {
     type Output;
@@ -206,21 +185,26 @@ pub trait NextResult<'a> {
     fn next(&'a self) -> Result<(Self::Output, &'a [u8]), Self::Error>;
 }
 
-impl<'a> NextResult<'a> for Result<(&'a ASEChunkHeader, &'a [u8]), ChunkHeaderParseError> {
-    type Output = &'a ASEChunkHeader;
-    type Error = ChunkHeaderParseError;
-    // We need to check current size, and return a new result with updated slice
-    fn next(&'a self) -> Result<(Self::Output, &'a [u8]), Self::Error> {
-        match self {
-            Ok((chunk, rest)) => {
-                let ofs : usize = (chunk.size - 6) as usize;
-                let next_chunk_start = &rest[ofs..];
-                parse_chunk_header(next_chunk_start)
-            },
-            Err(e) => Err(e.clone()),
-        }
-    }
+// impl<'a> NextResult<'a> for Result<(&'a ASEChunkHeader, &'a [u8]), ChunkHeaderParseError> {
+//     type Output = &'a ASEChunkHeader;
+//     type Error = ChunkHeaderParseError;
+//     // We need to check current size, and return a new result with updated slice
+//     fn next(&'a self) -> Result<(Self::Output, &'a [u8]), Self::Error> {
+//         match self {
+//             Ok((chunk, rest)) => {
+//                 let ofs : usize = chunk.size() - 6;
+//                 let next_chunk_start = &rest[ofs..];
+//                 Self::parse_chunk_header(next_chunk_start)
+//             },
+//             Err(e) => Err(e.clone()),
+//         }
+//     }
+// }
+
+trait HasSize {
+    fn size(&self) -> usize;
 }
+
 
 #[derive(Debug, Clone)]
 pub struct ChunkPtr<'a> {
@@ -232,49 +216,109 @@ impl ChunkPtr<'_> {
     fn len(&self) -> usize {
         self.count
     }
+
+    fn get<'a>(&'a self, index: usize) -> Option<ChunkPtr<'a>> {
+        let mut w = self.clone();
+        // let mut w: ChunkPtr<'a>  = self.clone();
+        if index >= self.count {
+            panic!("Index out of bounds");
+        }
+        for _ in 0..index-1 {
+            if let None = w.next() {
+                panic!("Index out of bounds");
+            }
+        }
+        w.next()
+
+
+        // w.next().map(|(a ,b)| {ChunkPtr {
+        //     ptr: b,
+        //     count: a.size as usize,
+        // }})
+
+    }
 }
+
+
+#[derive(Debug, FromBytes, KnownLayout, Immutable)]
+#[repr(packed)]
+struct ChunkCel {
+    layer_index: u16,
+    x_pos: i16,
+    y_pos: i16,
+    opacity: u8,
+    cel_type: u16,
+    z_index: i16,
+    _reserved: [u8; 5],
+
+
+}
+
+
+
+    
+impl<'a> Deref for ChunkPtr<'a> {
+    type Target = ASEChunkHeader;
+    
+    fn deref (&self) -> &'a Self::Target {
+        const SIZE: usize = 4;
+        let chunk_ptr =&self.ptr[SIZE..];
+        let (chunk_header, rest) = ASEChunkHeader::ref_from_prefix(&chunk_ptr).unwrap();
+        ChunkCel::
+        
+
+        // UnparsedChunk::r
+    }
+}
+
+
+// impl<'a> Mwahaha<'a, &'a ASEChunkHeader, ChunkHeaderParseError> for ChunkPtr<'a, &'a ASEChunkHeader, ChunkHeaderParseError> {
+//     fn parse_chunk_header(input: &'a [u8]) -> Result<(&'a ASEChunkHeader, &'a [u8]), ChunkHeaderParseError> {
+//         let (chunk, rest) = ASEChunkHeader::ref_from_prefix(&input)
+//             .map_err(|_| ChunkHeaderParseError::CastError)?;
+
+//         Ok((chunk, rest))
+//     }
+// }
     
 
-impl<'a> Iterator for ChunkPtr<'a> {
-    type Item = Result<(&'a ASEChunkHeader, &'a [u8]), ChunkHeaderParseError>;
+impl<'a> Iterator for ChunkPtr<'a> 
+{
+    // type Item = (&'a ASEChunkHeader, &'a [u8]);
+    type Item = ChunkPtr<'a>;
     
     fn next(&mut self) -> Option<Self::Item> {
-        match parse_chunk_header(self.ptr) {
-            Ok((chunk, rest)) => {
-                let ofs : usize = (chunk.size - 6) as usize;
-                self.ptr = &rest[ofs..];
-                Some(Ok((chunk, rest)))
-            },
-            Err(e) => None,
+        if let Some((chunk,rest)) = ASEChunkHeader::ref_from_prefix(&self.ptr)
+            .map_err(|_| ChunkHeaderParseError::CastError)
+            .ok() {
+            // chunk.validate();
+            #[cfg(test)] {
+                let chunk_type = chunk.chunk_type;
+                let size = chunk.size;
+                println!("Chunk type: {:#x}, size: {}", chunk_type, size);
+            }
+            let my_resp = self.clone();
+            self.ptr = &rest[(chunk.size as usize - 6)..];
+            Some(my_resp)
+        } else {
+            return None;
         }
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         (self.count, Some(self.count))
     }
-    // type Item = Result<(&'static ASEChunkHeader, &'static [u8]), ChunkHeaderParseError>;
-
-    // fn next(&mut self) -> Option<Self::Item> {
-
-    // }
 }
+// struct ASE<'a> {
+//     header: &'a ASEHeader,
+//     data: &'a [u8],
+// }
+// impl <'a> ASE<'a> {
+//     pub fn frames() -> ASEFrameContainer<'a> {
+//         ASEFrameContainer((), ())
+//     }
+// }
 
-impl <'a> Index<usize> for ChunkPtr<'a> {
-    type Output = ASEChunkHeader;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        let mut w = self.clone();
-        if index >= self.count {
-            panic!("Index out of bounds");
-        }
-        for _ in 1..index {
-            w.next().unwrap().unwrap();
-        }
-        let (a, _) = w.next().unwrap().unwrap();
-        a
-    }
-
-}
 
 
 #[cfg(test)]
@@ -299,14 +343,17 @@ mod test {
 
         let c: ChunkPtr = ChunkPtr { ptr: rest, count: frame.num_chunks as usize};
 
-        let chunk = &c[2];
+        // let chunk = &c[2];
     
         // let z  = parse_chunk_header(rest);
         // let (chunk , rest) = z.next().unwrap();
 
         // let (rest, ase) = ASE::parse(&a).unwrap();
         // println!("{:#x?}, rest: {}", ase, rest.len());
-        println!("{:#x?}", chunk);
+        // let w = (c[0]);
+        let w = c.get(2).unwrap();
+        let x = &w[0..10];
+        println!("{:#x?}", w.chunk);
 
 
     }
