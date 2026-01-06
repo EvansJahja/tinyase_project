@@ -9,6 +9,8 @@ use thiserror::Error;
 use zerocopy::*;
 // use nom::{IResult, Parser, bytes::complete::{tag, take}, number::complete::{le_u16, le_u32, u8} };
 use core::convert::Infallible;
+use core::iter::Iterator;
+use core::ops::Index;
 
 #[derive(Debug, FromBytes, KnownLayout, Immutable)]
 #[repr(packed)]
@@ -83,6 +85,20 @@ pub struct ASEFrame {
     num_chunks: u32,
 }
 
+pub struct ASEFrameContainer<'a> (pub &'a ASEFrame, pub &'a [u8]);
+
+impl<'a> IntoIterator for ASEFrameContainer<'a> {
+    type Item = Result<(&'a ASEChunkHeader, &'a [u8]), ChunkHeaderParseError>;
+    type IntoIter = ChunkPtr<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        ChunkPtr {
+            ptr: self.1 /* starting pointer to chunks */,
+            count: self.0.num_chunks as usize,
+        }
+    }
+}
+
 // #[derive(NomLE, Debug)]
 // pub struct ASEChunk<'a> {
 //     pub size: u32,
@@ -113,12 +129,12 @@ pub struct ASEFrame {
 // }
 
 #[derive(Error, Debug)]
-enum HeaderParseError {
+pub enum HeaderParseError {
     #[error("Cast error")]
     CastError,
 }
 
-fn parse_header<'a>(input: &'a [u8]) -> Result<(&'a ASEHeader, &'a [u8]), HeaderParseError> {
+pub fn parse_header<'a>(input: &'a [u8]) -> Result<(&'a ASEHeader, &'a [u8]), HeaderParseError> {
     let (header, rest) = ASEHeader::ref_from_prefix(&input).map_err(|_| HeaderParseError::CastError)?;
 
     Ok((header, rest))
@@ -126,31 +142,31 @@ fn parse_header<'a>(input: &'a [u8]) -> Result<(&'a ASEHeader, &'a [u8]), Header
 
 
 #[derive(Error, Debug)]
-enum FrameParseError {
+pub enum FrameParseError {
     #[error("Cast error")]
     CastError,
     #[error("Invalid magic number: {0}")]
     InvalidMagic(u16),
 }
-fn parse_frame<'a>(input: &'a [u8]) -> Result<(&'a ASEFrame, &'a [u8]), FrameParseError> {
+pub fn parse_frame<'a>(input: &'a [u8]) -> Result<ASEFrameContainer, FrameParseError> {
     let (frame, rest) = ASEFrame::ref_from_prefix(&input)
         .map_err(|_| FrameParseError::CastError)?;
     if frame._magic != 0xF1FA {
         return Err(FrameParseError::InvalidMagic(frame._magic));
     }
 
-    Ok((frame, rest))
+    Ok(ASEFrameContainer(frame, rest))
 }
 
 #[derive(Debug, FromBytes, KnownLayout, Immutable)]
 #[repr(packed)]
-struct ASEChunkHeader {
+pub struct ASEChunkHeader {
     pub size: u32,
     pub chunk_type: u16,
 }
 
 #[derive(Error, Debug, Clone)]
-enum ChunkHeaderParseError {
+pub enum ChunkHeaderParseError {
     #[error("Cast error")]
     CastError,
 }
@@ -164,7 +180,7 @@ fn parse_chunk_header<'a>(input: &'a [u8]) -> Result<(&'a ASEChunkHeader, &'a [u
 
 pub fn testparse(input: &[u8]) -> u16 {
     let (header, rest) = parse_header(input).unwrap();
-    let (frame, rest) = parse_frame(rest).unwrap();
+    let ASEFrameContainer(frame, rest) = parse_frame(rest).unwrap();
     frame._magic
 }
 
@@ -204,6 +220,59 @@ impl<'a> NextResult<'a> for Result<(&'a ASEChunkHeader, &'a [u8]), ChunkHeaderPa
             Err(e) => Err(e.clone()),
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct ChunkPtr<'a> {
+    ptr: &'a [u8],
+    count: usize,
+}
+
+impl ChunkPtr<'_> {
+    fn len(&self) -> usize {
+        self.count
+    }
+}
+    
+
+impl<'a> Iterator for ChunkPtr<'a> {
+    type Item = Result<(&'a ASEChunkHeader, &'a [u8]), ChunkHeaderParseError>;
+    
+    fn next(&mut self) -> Option<Self::Item> {
+        match parse_chunk_header(self.ptr) {
+            Ok((chunk, rest)) => {
+                let ofs : usize = (chunk.size - 6) as usize;
+                self.ptr = &rest[ofs..];
+                Some(Ok((chunk, rest)))
+            },
+            Err(e) => None,
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.count, Some(self.count))
+    }
+    // type Item = Result<(&'static ASEChunkHeader, &'static [u8]), ChunkHeaderParseError>;
+
+    // fn next(&mut self) -> Option<Self::Item> {
+
+    // }
+}
+
+impl <'a> Index<usize> for ChunkPtr<'a> {
+    type Output = ASEChunkHeader;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        let mut w = self.clone();
+        if index >= self.count {
+            panic!("Index out of bounds");
+        }
+        for _ in 1..index {
+            w.next().unwrap().unwrap();
+        }
+        let (a, _) = w.next().unwrap().unwrap();
+        a
+    }
 
 }
 
@@ -227,10 +296,14 @@ mod test {
         let a = std::fs::read("tests/anim_idle.ase").unwrap();
         let (header, rest) = parse_header(&a).unwrap();
 
-        let (frame , rest) = parse_frame(rest).unwrap();
+        let ASEFrameContainer(frame , rest) = parse_frame(rest).unwrap();
 
-        let z  = parse_chunk_header(rest);
-        let (chunk , rest) = z.next().unwrap();
+        let c: ChunkPtr = ChunkPtr { ptr: rest, count: frame.num_chunks as usize};
+
+        let chunk = &c[2];
+    
+        // let z  = parse_chunk_header(rest);
+        // let (chunk , rest) = z.next().unwrap();
 
         // let (rest, ase) = ASE::parse(&a).unwrap();
         // println!("{:#x?}, rest: {}", ase, rest.len());
