@@ -280,7 +280,6 @@ impl <'a> Index<usize> for ChunkPtr<'a> {
 #[cfg(test)]
 mod test {
     // use compression::prelude::{EncodeExt, ZlibEncoder};
-    use nom::error::dbg_dmp;
 
     use super::*;
     // #[test]
