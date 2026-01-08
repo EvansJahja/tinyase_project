@@ -7,6 +7,10 @@ use core::ops::Index;
 use core::marker::PhantomData;
 use core::ops::Deref;
 
+use self::chunk::*;
+
+pub mod chunk;
+
 #[derive(Debug, FromBytes, KnownLayout, Immutable)]
 #[repr(packed)]
 pub struct ASEHeader {
@@ -107,6 +111,14 @@ pub enum ChunkHeaderParseError {
     CastError,
 }
 
+
+pub struct ASEChunkContainer<'a> (pub &'a ASEChunkHeader, pub &'a [u8]);
+impl<'a> ASEChunkContainer<'a> {
+    fn get_chunk(&self) -> ASEChunk<'a> {
+        ASEChunk::new(self.0.chunk_type, self.1)
+    }
+}
+
 pub trait NextResult<'a> {
     type Output;
     type Error;
@@ -130,7 +142,7 @@ impl ChunkPtr<'_> {
         self.count
     }
 
-    fn get<'a>(&'a self, index: usize) -> Option<(&'a ASEChunkHeader, &'a [u8])> {
+    fn get<'a>(&'a self, index: usize) -> Option<ASEChunkContainer<'a>> {
         let mut w = self.clone();
         // let mut w: ChunkPtr<'a>  = self.clone();
         if index >= self.count {
@@ -144,6 +156,7 @@ impl ChunkPtr<'_> {
 
         w.next().map(|chunk_ptr|{
             ASEChunkHeader::ref_from_prefix(chunk_ptr.ptr).ok()
+            .map(|(h, p)| ASEChunkContainer::<'a>(h, p))
         }).flatten()
 
     }
@@ -204,6 +217,20 @@ impl<'a> Iterator for ChunkPtr<'a>
 #[cfg(test)]
 mod test {
     use super::*;
+    use std::boxed::Box;
+
+    pub fn get_chunk_17<'a>() -> ASEChunkContainer<'a>  {
+        let a = std::fs::read("tests/anim_idle.ase").unwrap();
+        let (header, rest) = parse_header(a.leak()).unwrap();
+
+        let fc: ASEFrameContainer<'a> = parse_frame(rest).unwrap();
+        let cptr = Box::leak(Box::new(fc.into_iter()));
+
+        // let c: ChunkPtr = ChunkPtr { ptr: rest, count: frame.num_chunks as usize};
+        let chunk = cptr.get(17).unwrap();
+        chunk
+        // chunk
+    }
 
     #[test]
     fn test_read() {
@@ -222,10 +249,12 @@ mod test {
         // let (rest, ase) = ASE::parse(&a).unwrap();
         // println!("{:#x?}, rest: {}", ase, rest.len());
         // let w = (c[0]);
-        let (w, rest) = c.get(17).unwrap();
-        let x = w;
-        let ct = w.chunk_type;
-        println!("{:#x?}", ct);
+        let chunk = c.get(17).unwrap();
+        // let x = w;
+        // let ct = chunk.0.chunk_type;
+        if let ASEChunk::Unknown(contents) = chunk.get_chunk() {
+            println!("{:#x?}", &contents[..10]);
+        }
 
 
     }
