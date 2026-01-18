@@ -39,6 +39,8 @@ struct CelContainer<'a> {
 #[derive(Debug)]
 enum CelData<'a> {
     Raw(RawImageDataContainer<'a>),
+    Linked(u32),
+    
 }
 
 impl<'a> CelContainer<'a> {
@@ -50,7 +52,12 @@ impl<'a> CelContainer<'a> {
                 let a = RawImageHeader::ref_from_prefix(self.ptr).unwrap();
                 let b = RawImageDataContainer{header: a.0, ptr: a.1};
                 CelData::Raw(b)
-            } 
+            },
+            1 => {
+                let (z, _) = u32::ref_from_prefix(self.ptr).unwrap();
+                CelData::Linked(*z)
+            }
+
             _ => panic!("Unsupported cel_type: {}", cel_type)
         }
     }

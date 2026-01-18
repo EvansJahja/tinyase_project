@@ -240,18 +240,7 @@ mod test {
         let ASEFrameContainer(frame , rest) = parse_frame(rest).unwrap();
 
         let c: ChunkPtr = ChunkPtr { ptr: rest, count: frame.num_chunks as usize};
-
-        // let chunk = &c[2];
-    
-        // let z  = parse_chunk_header(rest);
-        // let (chunk , rest) = z.next().unwrap();
-
-        // let (rest, ase) = ASE::parse(&a).unwrap();
-        // println!("{:#x?}, rest: {}", ase, rest.len());
-        // let w = (c[0]);
         let chunk = c.get(17).unwrap();
-        // let x = w;
-        // let ct = chunk.0.chunk_type;
         if let ASEChunk::Unknown(contents) = chunk.get_chunk() {
             println!("{:#x?}", &contents[..10]);
         }
