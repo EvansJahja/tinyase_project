@@ -45,7 +45,7 @@ impl<'a> FrameReader<'a> {
     pub fn chunks(&self) -> ChunkIterator<'a> {
         ChunkIterator {
             ptr: self.rest,
-            count: self.frame.num_chunks as usize,
+            remaining: self.frame.num_chunks as usize,
         }
     }
 }
@@ -84,6 +84,39 @@ mod test {
     use crate::parser::{HeaderReader, chunk::ASEChunk};
 
     use super::*;
+
+
+    #[test]
+    fn num_of_frames_matches() {
+        let v = std::fs::read("tests/anim_idle.ase").unwrap();
+        let data: &[u8] = &v;
+
+        let r = HeaderReader::new(data);
+        let expected_num_frames = r.header().frames;
+        let frames: Vec<FrameReader<'_>> = r.frames().collect();
+
+        assert_eq!(expected_num_frames, frames.len() as _);
+    }
+
+
+    #[test]
+    fn num_of_chunks_each_frames_matches() {
+        let v = std::fs::read("tests/anim_idle.ase").unwrap();
+        let data: &[u8] = &v;
+
+        let r = HeaderReader::new(data);
+        let expected_num_frames = r.header().frames;
+        let frames: Vec<FrameReader<'_>> = r.frames().collect();
+
+        for f in frames {
+            let expected_chunks = f.frame.num_chunks;
+            let chunks: Vec<_> =  f.chunks().collect();
+            assert_eq!(expected_chunks, chunks.len() as _);
+        }
+
+        // assert_eq!(expected_num_frames, frames.len() as _);
+    }
+
     #[test]
     fn test_reader_2() {
         let v = std::fs::read("tests/anim_idle.ase").unwrap();
@@ -101,13 +134,19 @@ mod test {
         let frame_8 = frames.next().unwrap();
         let frame_9 = frames.next().unwrap();
         let mut chunks = frame_8.chunks();
-        for chunk in chunks {
-            if let ASEChunk::Cel(cel) = chunk {
-                let cel_data = cel.get();
-                println!("{:?}", cel_data);
-            } else {
-                println!("{:x?}", chunk);
-            }
-        }
+
+
+        let z: Vec<ASEChunk<'_>>= chunks.collect();
+        let nc = frame_8.frame.num_chunks;
+        println!("{} {}", nc, z.len())
+
+        // for chunk in chunks {
+        //     if let ASEChunk::Cel(cel) = chunk {
+        //         let cel_data = cel.get();
+        //         println!("{:?}", cel_data);
+        //     } else {
+        //         println!("{:x?}", chunk);
+        //     }
+        // }
     }
 }

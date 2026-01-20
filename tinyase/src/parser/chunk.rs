@@ -5,7 +5,7 @@ use zerocopy::*;
 #[derive(Debug, Clone)]
 pub struct ChunkIterator<'a> {
     pub ptr: &'a [u8],
-    pub count: usize,
+    pub remaining: usize,
 }
 
 impl<'a> Iterator for ChunkIterator<'a> 
@@ -13,6 +13,9 @@ impl<'a> Iterator for ChunkIterator<'a>
     type Item = ASEChunk<'a>;
     
     fn next(&mut self) -> Option<Self::Item> {
+        if self.remaining <= 0 {
+            return None
+        }
         if let Some((chunk,rest)) = ASEChunkHeader::ref_from_prefix(&self.ptr)
             .map_err(|_| ChunkHeaderParseError::CastError)
             .ok() {
@@ -23,6 +26,7 @@ impl<'a> Iterator for ChunkIterator<'a>
             // }
             let my_resp = ASEChunkReader(chunk, rest);
             self.ptr = &rest[(chunk.size as usize - 6)..];
+            self.remaining = self.remaining - 1;
             Some(my_resp.get_chunk())
         } else {
             return None;
@@ -30,7 +34,7 @@ impl<'a> Iterator for ChunkIterator<'a>
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.count, Some(self.count))
+        (self.remaining, Some(self.remaining))
     }
 }
 
