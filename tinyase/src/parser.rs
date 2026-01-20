@@ -48,19 +48,51 @@ pub struct ASEFrame {
     num_chunks: u32,
 }
 
-pub struct ASEFrameContainer<'a> (pub &'a ASEFrame, pub &'a [u8]);
+#[derive(Clone)]
+pub struct ASEFrameContainer<'a> (pub &'a [u8]);
 
-impl<'a> IntoIterator for ASEFrameContainer<'a> {
-    type Item = ChunkPtr<'a>;
-    type IntoIter = ChunkPtr<'a>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        ChunkPtr {
-            ptr: self.1,
-            count: self.0.num_chunks as usize,
-        }
+impl<'a, 'b> ASEFrameContainer<'a> {
+    fn chunks(&'b self) -> ChunkIterator<'a> {
+        todo!()
+        // ChunkIterator {
+        //     ptr: self.1,
+        //     count: self.0.num_chunks as usize,
+        // }
     }
 }
+
+impl<'a> Iterator for ASEFrameContainer<'a> {
+    type Item = ASEFrameContainer<'a>;
+    
+    fn next(&mut self) -> Option<Self::Item> {
+        let ptr = self.0;
+        let (frame, rest)= parse_frame(ptr).unwrap();
+        let resp = self.clone();
+
+        let advance_bytes = frame.num_bytes as usize - 16;
+        self.0 = &rest[advance_bytes..];
+
+        return Some(resp)
+
+        // if let Some((frame, rest)) = ASEFrame::ref_from_prefix(ptr)
+        //     .map_err(|_| FrameParseError::CastError)
+        //     .ok() {
+        //         let resp = self.clone();
+        //         let advance_bytes = frame.num_bytes as usize - 16;
+        //         #[cfg(test)] {
+        //             let fnb = frame.num_bytes;
+        //             println!("fb: {}, frame: {:?}", fnb, frame);
+        //             println!("Advance bytes {}", advance_bytes);
+        //         }
+        //         // self.1 = &rest[advance_bytes..];
+        //         // self.0 = frame;
+        //         Some(resp)
+        //     } else {
+        //         None
+        //     }
+    }
+}
+
 
 #[derive(Error, Debug)]
 pub enum HeaderParseError {
@@ -82,136 +114,16 @@ pub enum FrameParseError {
     #[error("Invalid magic number: {0}")]
     InvalidMagic(u16),
 }
-pub fn parse_frame<'a>(input: &'a [u8]) -> Result<ASEFrameContainer, FrameParseError> {
+
+pub fn parse_frame<'a>(input: &'a [u8]) -> Result<(&'a ASEFrame, &'a [u8]), FrameParseError> {
     let (frame, rest) = ASEFrame::ref_from_prefix(&input)
         .map_err(|_| FrameParseError::CastError)?;
     if frame._magic != 0xF1FA {
         return Err(FrameParseError::InvalidMagic(frame._magic));
     }
 
-    Ok(ASEFrameContainer(frame, rest))
+    Ok((frame, rest))
 }
-
-#[derive(Debug, FromBytes, KnownLayout, Immutable)]
-#[repr(packed)]
-pub struct ASEChunkHeader {
-    pub size: u32,
-    pub chunk_type: u16,
-}
-
-impl HasSize for &'_ ASEChunkHeader {
-    fn size(&self) -> usize {
-        self.size as usize
-    }
-}
-
-#[derive(Error, Debug, Clone)]
-pub enum ChunkHeaderParseError {
-    #[error("Cast error")]
-    CastError,
-}
-
-
-pub struct ASEChunkContainer<'a> (pub &'a ASEChunkHeader, pub &'a [u8]);
-impl<'a> ASEChunkContainer<'a> {
-    fn get_chunk(&self) -> ASEChunk<'a> {
-        ASEChunk::new(self.0.chunk_type, self.1)
-    }
-}
-
-pub trait NextResult<'a> {
-    type Output;
-    type Error;
-    fn next(&'a self) -> Result<(Self::Output, &'a [u8]), Self::Error>;
-}
-
-trait HasSize {
-    fn size(&self) -> usize;
-}
-
-
-// ptr Points to start of chunk header, which is <u32 size><u16 type>
-#[derive(Debug, Clone)]
-pub struct ChunkPtr<'a> {
-    ptr: &'a [u8],
-    count: usize,
-}
-
-impl ChunkPtr<'_> {
-    fn len(&self) -> usize {
-        self.count
-    }
-
-    fn get<'a>(&'a self, index: usize) -> Option<ASEChunkContainer<'a>> {
-        let mut w = self.clone();
-        // let mut w: ChunkPtr<'a>  = self.clone();
-        if index >= self.count {
-            panic!("Index out of bounds");
-        }
-        for _ in 0..index-1 {
-            if let None = w.next() {
-                panic!("Index out of bounds");
-            }
-        }
-
-        w.next().map(|chunk_ptr|{
-            ASEChunkHeader::ref_from_prefix(chunk_ptr.ptr).ok()
-            .map(|(h, p)| ASEChunkContainer::<'a>(h, p))
-        }).flatten()
-
-    }
-}
-
-
-#[derive(Debug, FromBytes, KnownLayout, Immutable)]
-#[repr(packed)]
-struct ChunkCel {
-    layer_index: u16,
-    x_pos: i16,
-    y_pos: i16,
-    opacity: u8,
-    cel_type: u16,
-    z_index: i16,
-    _reserved: [u8; 5],
-}
-
-impl<'a> Iterator for ChunkPtr<'a> 
-{
-    // type Item = (&'a ASEChunkHeader, &'a [u8]);
-    type Item = ChunkPtr<'a>;
-    
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some((chunk,rest)) = ASEChunkHeader::ref_from_prefix(&self.ptr)
-            .map_err(|_| ChunkHeaderParseError::CastError)
-            .ok() {
-            // chunk.validate();
-            #[cfg(test)] {
-                let chunk_type = chunk.chunk_type;
-                let size = chunk.size;
-                println!("Chunk type: {:#x}, size: {}", chunk_type, size);
-            }
-            let my_resp = self.clone();
-            self.ptr = &rest[(chunk.size as usize - 6)..];
-            Some(my_resp)
-        } else {
-            return None;
-        }
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.count, Some(self.count))
-    }
-}
-// struct ASE<'a> {
-//     header: &'a ASEHeader,
-//     data: &'a [u8],
-// }
-// impl <'a> ASE<'a> {
-//     pub fn frames() -> ASEFrameContainer<'a> {
-//         ASEFrameContainer((), ())
-//     }
-// }
-
 
 
 #[cfg(test)]
@@ -223,28 +135,53 @@ mod test {
         let a = std::fs::read("tests/anim_idle.ase").unwrap();
         let (header, rest) = parse_header(a.leak()).unwrap();
 
-        let fc: ASEFrameContainer<'a> = parse_frame(rest).unwrap();
-        let cptr = Box::leak(Box::new(fc.into_iter()));
+        let (fc, rest) = parse_frame(rest).unwrap();
+        // let w: ChunkIterator<'a> = fc.chunks();
+        // // let cptr = Box::leak(Box::new(w));
+        // let cptr = w;
 
-        // let c: ChunkPtr = ChunkPtr { ptr: rest, count: frame.num_chunks as usize};
-        let chunk = cptr.get(17).unwrap();
-        chunk
+        // let chunk: ASEChunkContainer<'a> = cptr.get(17).unwrap();
         // chunk
+        todo!()
     }
 
     #[test]
-    fn test_read() {
+    fn read_frames() {
         let a = std::fs::read("tests/anim_idle.ase").unwrap();
         let (header, rest) = parse_header(&a).unwrap();
 
-        let ASEFrameContainer(frame , rest) = parse_frame(rest).unwrap();
+        let fc = ASEFrameContainer(rest);
+        // let fc = parse_frame(rest).unwrap();
 
-        let c: ChunkPtr = ChunkPtr { ptr: rest, count: frame.num_chunks as usize};
-        let chunk = c.get(17).unwrap();
-        if let ASEChunk::Unknown(contents) = chunk.get_chunk() {
-            println!("{:#x?}", &contents[..10]);
+        let mut iter = fc.into_iter();
+
+        for frame in iter {
+            println!("{:?}", frame.0)
+
         }
+        // let frame_1 = iter.next().unwrap().0;
 
+        // let frame_2 = iter.next().unwrap().0;
 
+        // println!("{:?}", frame_2)
+        
+
+        
+        
     }
+
+    // #[test]
+    // fn test_read() {
+    //     let a = std::fs::read("tests/anim_idle.ase").unwrap();
+    //     let (header, rest) = parse_header(&a).unwrap();
+
+    //     let ASEFrameContainer(frame , rest) = parse_frame(rest).unwrap();
+
+    //     let c: ChunkIterator = ChunkIterator { ptr: rest, count: frame.num_chunks as usize};
+    //     let chunk = c.get(17).unwrap();
+    //     if let ASEChunk::Unknown(contents) = chunk.get_chunk() {
+    //         println!("{:#x?}", &contents[..10]);
+    //     }
+
+    // }
 }
