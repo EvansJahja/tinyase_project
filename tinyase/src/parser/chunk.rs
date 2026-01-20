@@ -8,48 +8,22 @@ pub struct ChunkIterator<'a> {
     pub count: usize,
 }
 
-impl<'a> ChunkIterator<'a> {
-    fn len(&self) -> usize {
-        self.count
-    }
-
-    pub fn get(self, index: usize) -> Option<ASEChunkContainer<'a>> {
-        let mut w: ChunkIterator<'a> = self.clone();
-
-        if index >= self.count {
-            panic!("Index out of bounds");
-        }
-        for _ in 0..index-1 {
-            if let None = w.next() {
-                panic!("Index out of bounds");
-            }
-        }
-
-        w.next().map(|chunk_ptr|{
-            ASEChunkHeader::ref_from_prefix(chunk_ptr.ptr).ok()
-            .map(|(h, p)| ASEChunkContainer::<'a>(h, p))
-        }).flatten()
-
-    }
-}
-
 impl<'a> Iterator for ChunkIterator<'a> 
 {
-    type Item = ChunkIterator<'a>;
+    type Item = ASEChunk<'a>;
     
     fn next(&mut self) -> Option<Self::Item> {
         if let Some((chunk,rest)) = ASEChunkHeader::ref_from_prefix(&self.ptr)
             .map_err(|_| ChunkHeaderParseError::CastError)
             .ok() {
-            // chunk.validate();
-            #[cfg(test)] {
-                let chunk_type = chunk.chunk_type;
-                let size = chunk.size;
-                println!("Chunk type: {:#x}, size: {}", chunk_type, size);
-            }
-            let my_resp = self.clone();
+            // #[cfg(test)] {
+            //     let chunk_type = chunk.chunk_type;
+            //     let size = chunk.size;
+            //     println!("Chunk type: {:#x}, size: {}", chunk_type, size);
+            // }
+            let my_resp = ASEChunkReader(chunk, rest);
             self.ptr = &rest[(chunk.size as usize - 6)..];
-            Some(my_resp)
+            Some(my_resp.get_chunk())
         } else {
             return None;
         }
@@ -60,8 +34,8 @@ impl<'a> Iterator for ChunkIterator<'a>
     }
 }
 
-pub struct ASEChunkContainer<'a> (pub &'a ASEChunkHeader, pub &'a [u8]);
-impl<'a> ASEChunkContainer<'a> {
+pub struct ASEChunkReader<'a> (pub &'a ASEChunkHeader, pub &'a [u8]);
+impl<'a> ASEChunkReader<'a> {
     pub fn get_chunk(&self) -> ASEChunk<'a> {
         ASEChunk::new(self.0.chunk_type, self.1)
     }
@@ -69,14 +43,15 @@ impl<'a> ASEChunkContainer<'a> {
 
 #[derive(Debug)]
 pub enum ASEChunk<'a> {
-    Unknown(&'a[u8]),
+    Unknown(u16, &'a[u8]),
+    Cel(CelContainer<'a>),
 }
 
 impl<'a> ASEChunk<'a> {
     pub(super) fn new(chunk_type: u16, ptr: &'a[u8]) -> Self {
         match chunk_type {
-            // 0x2005 => chunk_cel(ptr),
-            _ => ASEChunk::Unknown(ptr)
+            0x2005 => ASEChunk::Cel(chunk_cel(ptr)),
+            _ => ASEChunk::Unknown(chunk_type, ptr),
         }
     }
 }
@@ -131,20 +106,21 @@ fn chunk_cel<'a>(ptr: &'a[u8]) -> CelContainer<'a>{
     CelContainer { cel_header: h, ptr: p }
 }
 
-struct CelContainer<'a> {
+#[derive(Debug)]
+pub struct CelContainer<'a> {
     cel_header: &'a CelHeader,
     ptr: &'a [u8],
 }
 
 #[derive(Debug)]
-enum CelData<'a> {
+pub enum CelData<'a> {
     Raw(RawImageDataContainer<'a>),
-    Linked(&'a u32),
+    Linked(u16),
     
 }
 
 impl<'a> CelContainer<'a> {
-    fn get(&self) -> CelData<'a> {
+    pub fn get(&self) -> CelData<'a> {
         let header = self.cel_header;
         let cel_type = header.cel_type;
         match cel_type {
@@ -154,8 +130,8 @@ impl<'a> CelContainer<'a> {
                 CelData::Raw(b)
             },
             1 => {
-                let (z, _) = u32::ref_from_prefix(self.ptr).unwrap();
-                CelData::Linked(z)
+                let (z, _) = U16::<LittleEndian>::ref_from_prefix(self.ptr).unwrap();
+                CelData::Linked(z.get())
             }
             _ => panic!("Unsupported cel_type: {}", cel_type)
         }

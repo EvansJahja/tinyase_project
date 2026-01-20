@@ -1,15 +1,81 @@
-use alloc::vec::Vec;
 use thiserror::Error;
 use zerocopy::*;
-use core::convert::Infallible;
 use core::iter::Iterator;
-use core::ops::Index;
-use core::marker::PhantomData;
-use core::ops::Deref;
 
 use self::chunk::*;
 
 pub mod chunk;
+
+
+struct HeaderReader<'a> {
+    data: &'a[u8]
+}
+
+impl<'a> HeaderReader<'a> {
+    pub fn new(data: &'a[u8]) -> Self {
+        HeaderReader { data }
+    }
+
+    fn header(&self) -> &'a ASEHeader {
+        let (header, next) = parse_header(self.data).unwrap();
+        header
+    }
+    
+    fn frames(&self) -> FrameListIterator<'a> {
+        let (header, next) = parse_header(self.data).unwrap();
+        FrameListIterator {
+            rest: next,
+            remaining: header.frames,
+        }
+    }
+}
+
+struct FrameListIterator<'a> {
+    rest: &'a [u8],
+    remaining: u16,
+}
+
+impl<'a> Iterator for FrameListIterator<'a> {
+    type Item = FrameReader<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.remaining <= 0 {
+            return None
+        }
+        let Some(fr) = FrameReader::new(self.rest).ok() else {
+            return None
+        };
+        let frame_size = fr.size() as usize;
+        self.rest = &self.rest[frame_size..];
+        self.remaining = self.remaining - 1;
+        
+        Some(fr)
+    }
+}
+
+struct FrameReader<'a> {
+    frame: &'a ASEFrameHeader,
+    rest: &'a[u8],
+}
+
+impl<'a> FrameReader<'a> {
+    fn new(data: &'a[u8]) -> Result<FrameReader<'a>, FrameParseError> {
+        parse_frame(data).map(|(frame, rest)| FrameReader{frame: frame, rest})
+    }
+
+    fn size(&self) -> u32 {
+        self.frame.num_bytes
+    }
+
+    fn chunks(&self) -> ChunkIterator<'a> {
+        ChunkIterator {
+            ptr: self.rest,
+            count: self.frame.num_chunks as usize,
+        }
+    }
+}
+
+
 
 #[derive(Debug, FromBytes, KnownLayout, Immutable)]
 #[repr(packed)]
@@ -36,10 +102,9 @@ pub struct ASEHeader {
     _reserved3: [u8; 84],
 }
 
-// #[derive(NomLE, Debug)]
 #[derive(Debug, FromBytes, KnownLayout, Immutable)]
 #[repr(packed)]
-pub struct ASEFrame {
+pub struct ASEFrameHeader {
     num_bytes: u32,
     _magic: u16,
     old_unused: u16,
@@ -100,7 +165,7 @@ pub enum HeaderParseError {
     CastError,
 }
 
-pub fn parse_header<'a>(input: &'a [u8]) -> Result<(&'a ASEHeader, &'a [u8]), HeaderParseError> {
+fn parse_header<'a>(input: &'a [u8]) -> Result<(&'a ASEHeader, &'a [u8]), HeaderParseError> {
     let (header, rest) = ASEHeader::ref_from_prefix(&input).map_err(|_| HeaderParseError::CastError)?;
 
     Ok((header, rest))
@@ -115,8 +180,8 @@ pub enum FrameParseError {
     InvalidMagic(u16),
 }
 
-pub fn parse_frame<'a>(input: &'a [u8]) -> Result<(&'a ASEFrame, &'a [u8]), FrameParseError> {
-    let (frame, rest) = ASEFrame::ref_from_prefix(&input)
+pub fn parse_frame<'a>(input: &'a [u8]) -> Result<(&'a ASEFrameHeader, &'a [u8]), FrameParseError> {
+    let (frame, rest) = ASEFrameHeader::ref_from_prefix(&input)
         .map_err(|_| FrameParseError::CastError)?;
     if frame._magic != 0xF1FA {
         return Err(FrameParseError::InvalidMagic(frame._magic));
@@ -131,7 +196,7 @@ mod test {
     use super::*;
     use std::boxed::Box;
 
-    pub fn get_chunk_17<'a>() -> ASEChunkContainer<'a>  {
+    pub fn get_chunk_17<'a>() -> ASEChunkReader<'a>  {
         let a = std::fs::read("tests/anim_idle.ase").unwrap();
         let (header, rest) = parse_header(a.leak()).unwrap();
 
@@ -155,10 +220,10 @@ mod test {
 
         let mut iter = fc.into_iter();
 
-        for frame in iter {
-            println!("{:?}", frame.0)
+        // for frame in iter {
+        //     println!("{:?}", frame.0)
 
-        }
+        // }
         // let frame_1 = iter.next().unwrap().0;
 
         // let frame_2 = iter.next().unwrap().0;
@@ -168,6 +233,33 @@ mod test {
 
         
         
+    }
+
+    #[test]
+    fn test_reader_2() {
+        let v = std::fs::read("tests/anim_idle.ase").unwrap();
+        let data: &[u8] = &v;
+
+        let r = HeaderReader::new(data);
+        let mut frames = r.frames();
+        let frame_1 = frames.next().unwrap();
+        let frame_2 = frames.next().unwrap();
+        let frame_3 = frames.next().unwrap();
+        let frame_4 = frames.next().unwrap();
+        let frame_5 = frames.next().unwrap();
+        let frame_6 = frames.next().unwrap();
+        let frame_7 = frames.next().unwrap();
+        let frame_8 = frames.next().unwrap();
+        let frame_9 = frames.next().unwrap();
+        let mut chunks = frame_1.chunks();
+        for chunk in chunks {
+            if let ASEChunk::Cel(cel) = chunk {
+                let cel_data = cel.get();
+                println!("{:?}", cel_data);
+            } else {
+                println!("{:x?}", chunk);
+            }
+        }
     }
 
     // #[test]
