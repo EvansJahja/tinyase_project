@@ -113,8 +113,6 @@ mod test {
             let chunks: Vec<_> =  f.chunks().collect();
             assert_eq!(expected_chunks, chunks.len() as _);
         }
-
-        // assert_eq!(expected_num_frames, frames.len() as _);
     }
 
     #[test]
@@ -133,20 +131,16 @@ mod test {
         let frame_7 = frames.next().unwrap();
         let frame_8 = frames.next().unwrap();
         let frame_9 = frames.next().unwrap();
-        let mut chunks = frame_8.chunks();
+        let mut chunks = frame_1.chunks();
 
-
-        let z: Vec<ASEChunk<'_>>= chunks.collect();
-        let nc = frame_8.frame.num_chunks;
-        println!("{} {}", nc, z.len())
-
-        // for chunk in chunks {
-        //     if let ASEChunk::Cel(cel) = chunk {
-        //         let cel_data = cel.get();
-        //         println!("{:?}", cel_data);
-        //     } else {
-        //         println!("{:x?}", chunk);
-        //     }
-        // }
+        for chunk in chunks {
+            println!("{}", chunk);
+            // if let ASEChunk::Cel(cel) = chunk {
+            //     let cel_data = cel.get();
+            //     println!("{:?}", cel_data);
+            // } else {
+            //     println!("{:x?}", chunk);
+            // }
+        }
     }
 }

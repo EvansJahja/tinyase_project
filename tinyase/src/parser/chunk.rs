@@ -1,6 +1,8 @@
 use thiserror::Error;
 use zerocopy::*;
 
+pub mod layer;
+
 // ptr Points to start of chunk header, which is <u32 size><u16 type>
 #[derive(Debug, Clone)]
 pub struct ChunkIterator<'a> {
@@ -41,7 +43,9 @@ impl<'a> Iterator for ChunkIterator<'a>
 pub struct ASEChunkReader<'a> (pub &'a ASEChunkHeader, pub &'a [u8]);
 impl<'a> ASEChunkReader<'a> {
     pub fn get_chunk(&self) -> ASEChunk<'a> {
-        ASEChunk::new(self.0.chunk_type, self.1)
+        let chunk_size = self.0.size;
+        let data = &self.1[..(chunk_size as usize - 6)];
+        ASEChunk::new(self.0.chunk_type, data)
     }
 }
 
@@ -49,13 +53,31 @@ impl<'a> ASEChunkReader<'a> {
 pub enum ASEChunk<'a> {
     Unknown(u16, &'a[u8]),
     Cel(CelContainer<'a>),
+    Layer(Layer<'a>),
 }
 
+#[cfg(test)]
+    use std::fmt::Display;
+
+use crate::parser::chunk::layer::Layer;
+
+#[cfg(test)]
+    impl Display for ASEChunk<'_> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                ASEChunk::Unknown(t, _) => write!(f, "Unknown Chunk Type: {:#x}", t),
+                ASEChunk::Cel(_) => write!(f, "Cel Chunk"),
+                ASEChunk::Layer(_) => write!(f, "Layer Chunk"),
+            }
+        }
+    }
+
 impl<'a> ASEChunk<'a> {
-    pub(super) fn new(chunk_type: u16, ptr: &'a[u8]) -> Self {
+    pub(super) fn new(chunk_type: u16, data: &'a[u8]) -> Self {
         match chunk_type {
-            0x2005 => ASEChunk::Cel(chunk_cel(ptr)),
-            _ => ASEChunk::Unknown(chunk_type, ptr),
+            0x2004 => ASEChunk::Layer(Layer::new(data)),
+            0x2005 => ASEChunk::Cel(chunk_cel(data)),
+            _ => ASEChunk::Unknown(chunk_type, data),
         }
     }
 }
@@ -172,7 +194,7 @@ mod test {
         } else {
             panic!("unexpected cel type")
         };
-        
+
         println!("{:#x?}", cd);
 
     }
