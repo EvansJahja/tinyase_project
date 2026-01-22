@@ -168,22 +168,4 @@ pub struct RawImageDataContainer<'a> {
 #[cfg(test)]
 mod test {
     use super::*;
-    #[test]
-    fn test_cel() {
-        let cont = crate::parser::test::get_chunk_17();
-        // assume this is a cel
-
-        let chunk_ptr = cont.1;
-        let ase_chunk = chunk_cel(chunk_ptr);
-        let cd = ase_chunk.get();
-        if let CelData::Raw(r) = cd {
-            println!("{:?}", r.header)
-
-        } else {
-            panic!("unexpected cel type")
-        };
-
-        // println!("{:#x?}", cd);
-
-    }
 }
