@@ -6,6 +6,7 @@ use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::Window;
+use clap::Parser;
 
 use crate::draw::ASEDrawing;
 
@@ -61,14 +62,25 @@ impl<'a> ApplicationHandler for App<'a> {
 }
 
 fn main() {
+
+    #[derive(Parser)]
+    #[command(version, about, long_about = None)]
+    struct Args {
+        /// .ase or .aseprite file to open. See tinyase/tests/anim_idle.ase for an example file.
+        aseprite_file: String,
+    }
+
+    let args = Args::parse();
+
+
     let event_loop = EventLoop::new().unwrap();
     // Use Poll to ensure the loop runs as fast as possible for smooth animation
     event_loop.set_control_flow(ControlFlow::Poll);
 
-    let a = std::fs::read("./tinyase/tests/anim_idle.ase").unwrap();
-    let a = tinyase::parser::HeaderReader::new(&a);
+    let file_buf = std::fs::read(&args.aseprite_file).expect("Failed to find aseprite file");
+    let header_reader = tinyase::parser::HeaderReader::new(&file_buf);
     let drawing = ASEDrawing {
-        reader: a,
+        reader: header_reader,
     };
     
     let mut app = App {
