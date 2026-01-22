@@ -1,0 +1,10 @@
+[package]
+name = "tinyase_demo"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+pixels = "0.15.0"
+winit = "0.30.12"
+tinyase = { path = "../tinyase"}
+tiny-skia = "0.11.4"

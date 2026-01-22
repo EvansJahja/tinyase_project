@@ -10,7 +10,7 @@ pub mod chunk;
 pub mod frame;
 
 
-struct HeaderReader<'a> {
+pub struct HeaderReader<'a> {
     data: &'a[u8]
 }
 
@@ -19,12 +19,12 @@ impl<'a> HeaderReader<'a> {
         HeaderReader { data }
     }
 
-    fn header(&self) -> &'a ASEHeader {
+    pub fn header(&self) -> &'a ASEHeader {
         let (header, next) = parse_header(self.data).unwrap();
         header
     }
     
-    fn frames(&self) -> FrameListIterator<'a> {
+    pub fn frames(&self) -> FrameListIterator<'a> {
         let (header, next) = parse_header(self.data).unwrap();
         FrameListIterator {
             rest: next,
@@ -68,7 +68,7 @@ pub enum HeaderParseError {
     CastError,
 }
 
-fn parse_header<'a>(input: &'a [u8]) -> Result<(&'a ASEHeader, &'a [u8]), HeaderParseError> {
+pub fn parse_header<'a>(input: &'a [u8]) -> Result<(&'a ASEHeader, &'a [u8]), HeaderParseError> {
     let (header, rest) = ASEHeader::ref_from_prefix(&input).map_err(|_| HeaderParseError::CastError)?;
 
     Ok((header, rest))

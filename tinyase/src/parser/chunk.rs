@@ -102,28 +102,15 @@ pub trait NextResult<'a> {
 }
 
 
-#[derive(Debug, FromBytes, KnownLayout, Immutable)]
-#[repr(packed)]
-struct ChunkCel {
-    layer_index: u16,
-    x_pos: i16,
-    y_pos: i16,
-    opacity: u8,
-    cel_type: u16,
-    z_index: i16,
-    _reserved: [u8; 5],
-}
-
-
 #[derive(Debug, Unaligned, TryFromBytes, KnownLayout, Immutable)]
 #[repr(packed)]
 pub struct CelHeader {
-    layer_index: u16,
-    point_x: i16,
-    point_y: i16,
-    opacity: u8,
-    cel_type: u16,
-    z_index: i16,
+    pub layer_index: u16,
+    pub point_x: i16,
+    pub point_y: i16,
+    pub opacity: u8,
+    pub cel_type: u16,
+    pub z_index: i16,
     _unused_1: [u8; 5],
 }
 
@@ -134,7 +121,7 @@ fn chunk_cel<'a>(ptr: &'a[u8]) -> CelContainer<'a>{
 
 #[derive(Debug)]
 pub struct CelContainer<'a> {
-    cel_header: &'a CelHeader,
+    pub cel_header: &'a CelHeader,
     ptr: &'a [u8],
 }
 
@@ -166,15 +153,15 @@ impl<'a> CelContainer<'a> {
 
 #[derive(Debug, FromBytes, Immutable, KnownLayout)]
 #[repr(packed)]
-struct RawImageHeader {
-    width: u32,
-    height: u32,
+pub struct RawImageHeader {
+    pub width: u16,
+    pub height: u16,
 }
 
 #[derive(Debug)]
-struct RawImageDataContainer<'a> {
-    header: &'a RawImageHeader,
-    ptr: &'a [u8],
+pub struct RawImageDataContainer<'a> {
+    pub header: &'a RawImageHeader,
+    pub ptr: &'a [u8],
 }
 
 
@@ -189,13 +176,14 @@ mod test {
         let chunk_ptr = cont.1;
         let ase_chunk = chunk_cel(chunk_ptr);
         let cd = ase_chunk.get();
-        if let CelData::Raw(_) = cd {
+        if let CelData::Raw(r) = cd {
+            println!("{:?}", r.header)
 
         } else {
             panic!("unexpected cel type")
         };
 
-        println!("{:#x?}", cd);
+        // println!("{:#x?}", cd);
 
     }
 }

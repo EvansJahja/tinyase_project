@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
 members = ["aseprite_tool",
-    "tinyase",
+    "tinyase", "tinyase_demo",
     # "aseprite_tool"
     ]

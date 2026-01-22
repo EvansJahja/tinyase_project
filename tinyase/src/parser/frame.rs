@@ -134,13 +134,13 @@ mod test {
         let mut chunks = frame_1.chunks();
 
         for chunk in chunks {
-            println!("{}", chunk);
-            // if let ASEChunk::Cel(cel) = chunk {
-            //     let cel_data = cel.get();
-            //     println!("{:?}", cel_data);
-            // } else {
-            //     println!("{:x?}", chunk);
-            // }
+            // println!("{:?}", chunk);
+            if let ASEChunk::Cel(cel) = chunk {
+                let cel_data = cel.get();
+                println!("{:?}", cel_data);
+            } else {
+                println!("{:x?}", chunk);
+            }
         }
     }
 }
