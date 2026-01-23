@@ -3,7 +3,7 @@ name = "tinyase"
 description = "A no-std and mostly zerocopy Aseprite (.ase/.aseprite) file parser for embedded devices"
 repository = "https://github.com/EvansJahja/tinyase_project"
 keywords = ["aseprite", "ase", "no-std", "zerocopy", "embedded"]
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 

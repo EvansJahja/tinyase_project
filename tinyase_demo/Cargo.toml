@@ -1,7 +1,7 @@
 [package]
 name = "tinyase_demo"
 description = "Demo application for the tinyase Aseprite file parser"
-version = "0.1.1"
+version = "0.1.2"
 repository = "https://github.com/EvansJahja/tinyase_project"
 edition = "2024"
 license = "MIT OR Apache-2.0"
