@@ -1,5 +1,7 @@
 [package]
 name = "tinyase"
+description = "A no-std and mostly zerocopy Aseprite (.ase/.aseprite) file parser for embedded devices"
+keywords = ["aseprite", "ase", "no-std", "zerocopy", "embedded"]
 version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"

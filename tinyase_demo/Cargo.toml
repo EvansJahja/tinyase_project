@@ -1,5 +1,6 @@
 [package]
 name = "tinyase_demo"
+description = "Demo application for the tinyase Aseprite file parser"
 version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
@@ -7,6 +8,6 @@ license = "MIT OR Apache-2.0"
 [dependencies]
 pixels = "0.15.0"
 winit = "0.30.12"
-tinyase = { path = "../tinyase"}
+tinyase = { version = "0.1.0", path = "../tinyase"}
 tiny-skia = "0.11.4"
 clap = { version = "4.5.54", features = ["derive"] }
