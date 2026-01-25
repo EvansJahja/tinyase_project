@@ -129,17 +129,16 @@ pub struct CelContainer<'a> {
 pub enum CelData<'a> {
     Raw(RawImageDataContainer<'a>),
     Linked(u16),
-    
 }
 
 impl<'a> CelContainer<'a> {
-    pub fn get(&self) -> CelData<'a> {
+    pub fn get(&'a self) -> CelData<'a> {
         let header = self.cel_header;
         let cel_type = header.cel_type;
         match cel_type {
             0 => {
                 let a = RawImageHeader::ref_from_prefix(self.ptr).unwrap();
-                let b = RawImageDataContainer{header: a.0, ptr: a.1};
+                let b = RawImageDataContainer{parent: self, header: a.0, ptr: a.1};
                 CelData::Raw(b)
             },
             1 => {
@@ -158,14 +157,124 @@ pub struct RawImageHeader {
     pub height: u16,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RawImageDataContainer<'a> {
+    pub parent: &'a CelContainer<'a>,
     pub header: &'a RawImageHeader,
     pub ptr: &'a [u8],
 }
 
-
-#[cfg(test)]
-mod test {
+#[cfg(feature = "embedded_graphics")]  
+pub mod embedded_graphics_impl {
     use super::*;
+    use embedded_graphics::pixelcolor::raw::RawU2;
+    use embedded_graphics::pixelcolor::{BinaryColor, Gray2};
+    use embedded_graphics::prelude::*;
+    use embedded_graphics::primitives::Rectangle;
+
+    
+    impl From<&RawImageDataContainer<'_>> for Rectangle {
+        fn from(value: &RawImageDataContainer) -> Self {
+            let x = value.parent.cel_header.point_x as i32;
+            let y = value.parent.cel_header.point_y as i32;
+            let width = value.header.width as u32;
+            let height = value.header.height as u32;
+            Rectangle::new(
+                Point::new(x, y),
+                Size::new(width, height)
+            )
+        }
+
+    }
+
+    impl<'a> IntoIterator for &'a RawImageDataContainer<'a> {
+        type Item = AlphaBinaryColor;
+        type IntoIter = PixelIterator<'a>;
+        
+        fn into_iter(self) -> Self::IntoIter {
+            PixelIterator::new(self.clone())
+            // PixelIterator {
+            //     idc: self.clone(),
+            //     remaining: (self.header.width as usize) * (self.header.height as usize),
+            // }
+        }
+
+    }
+
+    pub struct PixelIterator<'a> {
+        idc: RawImageDataContainer<'a>,
+        ptr: &'a [u8],
+        idx: usize,
+    }
+
+    impl<'a> PixelIterator<'a> {
+        pub fn new(idc: RawImageDataContainer<'a>) -> Self {
+            PixelIterator {
+                ptr: idc.ptr,
+                idc,
+                idx: 0,
+            }
+        }
+    }
+
+    // Used for embedded graphics, starting from top-left
+    impl Iterator for PixelIterator<'_> {
+        type Item = AlphaBinaryColor;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            // todo!();
+
+            if self.idx >= (self.idc.header.width as usize) * (self.idc.header.height as usize) {
+                return None;
+            }
+
+
+            // Assume the following colors: transparent, black, white
+            let ret = match self.ptr.get(self.idx) {
+                Some(x) => Some(AlphaBinaryColor(RawU2::new(*x))),
+                _ => return None,
+            };
+            self.idx += 1;
+            ret
+        }
+    }
+
+    #[derive(PartialEq, Eq, Clone, Copy, Debug)]
+    pub struct AlphaBinaryColor(RawU2);
+
+    impl PixelColor for AlphaBinaryColor {
+        type Raw = RawU2;
+    }
+    
+    impl From<RawU2> for AlphaBinaryColor {
+        fn from(data: RawU2) -> Self {
+            AlphaBinaryColor(data)
+        }
+    }
+
+    impl From<AlphaBinaryColor> for RawU2 {
+        fn from(color: AlphaBinaryColor) -> Self {
+            color.0
+        }
+    }
+
+        
+}
+
+
+
+
+
+#[cfg(all(test, feature = "embedded_graphics"))]
+mod embedded_graphics_test {
+    use embedded_graphics::{framebuffer::{Framebuffer, buffer_size}, pixelcolor::{self, Gray2, raw::RawU2}};
+
+    use crate::parser::chunk::embedded_graphics_impl::AlphaBinaryColor;
+
+    use super::*;
+
+    #[test]
+    fn test_pixel_iterator() {
+        let mut back_buffer: Framebuffer<AlphaBinaryColor, RawU2, BigEndian, 32, 32, {buffer_size::<AlphaBinaryColor>(320, 240)}> = Framebuffer::new();
+    }
 }
