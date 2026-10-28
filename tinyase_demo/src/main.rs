@@ -30,6 +30,8 @@ impl<'a> ApplicationHandler for App<'a> {
             .with_inner_size(winit::dpi::LogicalSize::new(window_width, window_height));
         
         let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
+
+        let scaling = window.scale_factor();
         let surface_texture = SurfaceTexture::new(window_width, window_height, Arc::clone(&window));
         let pixels = Pixels::new(width, height, surface_texture).unwrap();
         self.window = Some(window);
@@ -44,6 +46,12 @@ impl<'a> ApplicationHandler for App<'a> {
     ) {
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
+            WindowEvent::Resized(new_size) => {
+                if let Some(pixels) = &mut self.pixels {
+                    pixels.resize_surface(new_size.width, new_size.height).unwrap();
+                }
+
+            }
             WindowEvent::RedrawRequested => {
                 if let (Some(pixels), Some(window)) = (&mut self.pixels, &self.window) {
                     
@@ -78,7 +86,7 @@ fn main() {
     event_loop.set_control_flow(ControlFlow::Poll);
 
     let file_buf = std::fs::read(&args.aseprite_file).expect("Failed to find aseprite file");
-    let header_reader = tinyase::parser::HeaderReader::new(&file_buf);
+    let header_reader = tinyase::parser::AsepriteFile::new(&file_buf);
     let drawing = ASEDrawing {
         reader: header_reader,
     };

@@ -1,35 +1,38 @@
 use thiserror::Error;
-use zerocopy::*;
-use core::iter::Iterator;
+use zerocopy::{FromBytes, Immutable, KnownLayout, little_endian::U16};
+
 
 use crate::parser::frame::FrameListIterator;
-
-use self::chunk::*;
 
 pub mod chunk;
 pub mod frame;
 
 
-pub struct HeaderReader<'a> {
+pub struct AsepriteFile<'a> {
     data: &'a[u8]
 }
 
-impl<'a> HeaderReader<'a> {
+impl<'a> AsepriteFile<'a> {
     pub fn new(data: &'a[u8]) -> Self {
-        HeaderReader { data }
+        AsepriteFile { data }
     }
 
-    pub fn header(&self) -> &'a ASEHeader {
-        let (header, next) = parse_header(self.data).unwrap();
+    pub fn header(&self) -> &'a Header {
+        let (header, _next) = Self::parse_header(self.data).unwrap();
         header
     }
     
     pub fn frames(&self) -> FrameListIterator<'a> {
-        let (header, next) = parse_header(self.data).unwrap();
+        let (header, next) = Self::parse_header(self.data).unwrap();
         FrameListIterator {
-            rest: next,
+            ptr: next,
             remaining: header.frames,
         }
+    }
+    fn parse_header(input: &'a [u8]) -> Result<(&'a Header, &'a [u8]), HeaderParseError> {
+        let (header, rest) = Header::ref_from_prefix(&input).map_err(|_| HeaderParseError::CastError)?;
+
+        Ok((header, rest))
     }
 }
 
@@ -37,7 +40,7 @@ impl<'a> HeaderReader<'a> {
 
 #[derive(Debug, FromBytes, KnownLayout, Immutable)]
 #[repr(packed)]
-pub struct ASEHeader {
+pub struct Header {
     pub filesize: u32,
     _magic: u16,
     pub frames: u16,
@@ -68,31 +71,29 @@ pub enum HeaderParseError {
     CastError,
 }
 
-pub fn parse_header<'a>(input: &'a [u8]) -> Result<(&'a ASEHeader, &'a [u8]), HeaderParseError> {
-    let (header, rest) = ASEHeader::ref_from_prefix(&input).map_err(|_| HeaderParseError::CastError)?;
 
-    Ok((header, rest))
+
+
+
+
+pub fn prefix_string(ptr: &[u8]) -> (&str, &[u8]) {
+    let (name_len, rest) = U16::ref_from_prefix(ptr).unwrap();
+    let name_len: usize = name_len.get() as _;
+    let layer_name = str::from_utf8(&rest[..name_len]).unwrap();
+    let rest = &rest[name_len..];
+
+    (layer_name, rest)
 }
+
 
 
 
 #[cfg(test)]
 mod test {
+    use crate::parser::chunk::ASEChunkReader;
+
     use super::*;
 
-    pub fn get_chunk_17<'a>() -> ASEChunkReader<'a>  {
-        let a = std::fs::read("tests/anim_idle.ase").unwrap();
-        let (header, rest) = parse_header(a.leak()).unwrap();
-
-        // let (fc, rest) = parse_frame(rest).unwrap();
-        // let w: ChunkIterator<'a> = fc.chunks();
-        // // let cptr = Box::leak(Box::new(w));
-        // let cptr = w;
-
-        // let chunk: ASEChunkContainer<'a> = cptr.get(17).unwrap();
-        // chunk
-        todo!()
-    }
 
 
     // #[test]

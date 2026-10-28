@@ -1,14 +1,14 @@
 use core::{fmt, time::Duration};
-use std::vec;
+use std::{println, vec};
 
 use pixels::Pixels;
-use tinyase::parser::{HeaderReader, chunk::{self, CelData}, frame};
+use tinyase::parser::{AsepriteFile, chunk::{self, CelData}, frame};
 use tiny_skia::{self, IntSize, PixmapMut, PixmapPaint, Transform};
 
 
 
 pub struct ASEDrawing<'a> {
-    pub reader: HeaderReader<'a>
+    pub reader: AsepriteFile<'a>
 }
 
 

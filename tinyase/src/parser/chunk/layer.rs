@@ -1,6 +1,5 @@
-use core::{fmt::{Debug, Formatter, Result}, marker::PhantomData, ops::Deref};
+use core::fmt::{Debug, Formatter, Result} ;
 
-use thiserror::Error;
 use zerocopy::*;
 use bitflags::bitflags;
 
@@ -8,7 +7,6 @@ use bitflags::bitflags;
 pub struct Layer<'a> {
     pub header: &'a LayerHeader,
     pub name: &'a str,
-    rest: &'a [u8],
 }
 
 bitflags! {
@@ -110,21 +108,21 @@ impl<'a> Layer<'a> {
         let (name_len, rest) = U16::<LE>::ref_from_prefix(rest).unwrap();
         let name_len: usize = name_len.get() as _;
         let layer_name = str::from_utf8(&rest[..name_len]).unwrap();
-        Layer { header: layer, name: layer_name, rest: &rest[name_len..] }
+        Layer { header: layer, name: layer_name }
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::parser::{HeaderReader, chunk::ASEChunk};
+    use crate::parser::{AsepriteFile, chunk::ASEChunk};
 
     #[test]
     fn layer() {
         let v = std::fs::read("tests/anim_idle.ase").unwrap();
         let data: &[u8] = &v;
 
-        let r = HeaderReader::new(data);
+        let r = AsepriteFile::new(data);
         let mut frames = r.frames();
         let frame_1 = frames.next().unwrap();
 

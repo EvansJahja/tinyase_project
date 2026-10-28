@@ -6,7 +6,7 @@ use crate::parser::chunk::ChunkIterator;
 
 
 pub struct FrameListIterator<'a> {
-    pub(crate) rest: &'a [u8],
+    pub(crate) ptr: &'a [u8],
     pub(crate) remaining: u16,
 }
 
@@ -17,11 +17,11 @@ impl<'a> Iterator for FrameListIterator<'a> {
         if self.remaining <= 0 {
             return None
         }
-        let Some(fr) = FrameReader::new(self.rest).ok() else {
+        let Some(fr) = FrameReader::new(self.ptr).ok() else {
             return None
         };
         let frame_size = fr.size() as usize;
-        self.rest = &self.rest[frame_size..];
+        self.ptr = &self.ptr[frame_size..];
         self.remaining = self.remaining - 1;
         
         Some(fr)
@@ -69,7 +69,7 @@ pub enum FrameParseError {
     InvalidMagic(u16),
 }
 
-pub fn parse_frame<'a>(input: &'a [u8]) -> Result<(&'a ASEFrameHeader, &'a [u8]), FrameParseError> {
+fn parse_frame<'a>(input: &'a [u8]) -> Result<(&'a ASEFrameHeader, &'a [u8]), FrameParseError> {
     let (frame, rest) = ASEFrameHeader::ref_from_prefix(&input)
         .map_err(|_| FrameParseError::CastError)?;
     if frame._magic != 0xF1FA {
@@ -81,7 +81,7 @@ pub fn parse_frame<'a>(input: &'a [u8]) -> Result<(&'a ASEFrameHeader, &'a [u8])
 
 #[cfg(test)]
 mod test {
-    use crate::parser::{HeaderReader, chunk::ASEChunk};
+    use crate::parser::{AsepriteFile, chunk::ASEChunk};
 
     use super::*;
 
@@ -91,7 +91,7 @@ mod test {
         let v = std::fs::read("tests/anim_idle.ase").unwrap();
         let data: &[u8] = &v;
 
-        let r = HeaderReader::new(data);
+        let r = AsepriteFile::new(data);
         let expected_num_frames = r.header().frames;
         let frames: Vec<FrameReader<'_>> = r.frames().collect();
 
@@ -104,7 +104,7 @@ mod test {
         let v = std::fs::read("tests/anim_idle.ase").unwrap();
         let data: &[u8] = &v;
 
-        let r = HeaderReader::new(data);
+        let r = AsepriteFile::new(data);
         let expected_num_frames = r.header().frames;
         let frames: Vec<FrameReader<'_>> = r.frames().collect();
 
@@ -120,7 +120,7 @@ mod test {
         let v = std::fs::read("tests/anim_idle.ase").unwrap();
         let data: &[u8] = &v;
 
-        let r = HeaderReader::new(data);
+        let r = AsepriteFile::new(data);
         let mut frames = r.frames();
         let frame_1 = frames.next().unwrap();
         let frame_2 = frames.next().unwrap();
@@ -137,7 +137,7 @@ mod test {
             // println!("{:?}", chunk);
             if let ASEChunk::Cel(cel) = chunk {
                 let cel_data = cel.get();
-                println!("{:?}", cel_data);
+                // println!("{:?}", cel_data);
             } else {
                 println!("{:x?}", chunk);
             }

@@ -1,7 +1,8 @@
 use thiserror::Error;
-use zerocopy::*;
+use zerocopy::{little_endian::U16, *};
 
 pub mod layer;
+pub mod tags;
 
 // ptr Points to start of chunk header, which is <u32 size><u16 type>
 #[derive(Debug, Clone)]
@@ -54,12 +55,15 @@ pub enum ASEChunk<'a> {
     Unknown(u16, &'a[u8]),
     Cel(CelContainer<'a>),
     Layer(Layer<'a>),
+    Tags(TagIterator<'a>),
 }
 
 #[cfg(test)]
+use core::fmt::write;
+#[cfg(test)]
     use std::fmt::Display;
 
-use crate::parser::chunk::layer::Layer;
+use crate::parser::chunk::{layer::Layer, tags::TagIterator};
 
 #[cfg(test)]
     impl Display for ASEChunk<'_> {
@@ -68,6 +72,7 @@ use crate::parser::chunk::layer::Layer;
                 ASEChunk::Unknown(t, _) => write!(f, "Unknown Chunk Type: {:#x}", t),
                 ASEChunk::Cel(_) => write!(f, "Cel Chunk"),
                 ASEChunk::Layer(_) => write!(f, "Layer Chunk"),
+                ASEChunk::Tags(_) => write!(f, "Tags"),
             }
         }
     }
@@ -77,6 +82,7 @@ impl<'a> ASEChunk<'a> {
         match chunk_type {
             0x2004 => ASEChunk::Layer(Layer::new(data)),
             0x2005 => ASEChunk::Cel(chunk_cel(data)),
+            0x2018 => ASEChunk::Tags(TagIterator::new(data)),
             _ => ASEChunk::Unknown(chunk_type, data),
         }
     }
@@ -94,13 +100,6 @@ pub enum ChunkHeaderParseError {
     #[error("Cast error")]
     CastError,
 }
-
-pub trait NextResult<'a> {
-    type Output;
-    type Error;
-    fn next(&'a self) -> Result<(Self::Output, &'a [u8]), Self::Error>;
-}
-
 
 #[derive(Debug, Unaligned, TryFromBytes, KnownLayout, Immutable)]
 #[repr(packed)]
@@ -142,13 +141,18 @@ impl<'a> CelContainer<'a> {
                 CelData::Raw(b)
             },
             1 => {
-                let (z, _) = U16::<LittleEndian>::ref_from_prefix(self.ptr).unwrap();
+                let (z, _) = U16::ref_from_prefix(self.ptr).unwrap();
                 CelData::Linked(z.get())
             }
             _ => panic!("Unsupported cel_type: {}", cel_type)
         }
     }
 }
+
+
+
+
+
 
 #[derive(Debug, FromBytes, Immutable, KnownLayout)]
 #[repr(packed)]
@@ -162,6 +166,21 @@ pub struct RawImageDataContainer<'a> {
     pub parent: &'a CelContainer<'a>,
     pub header: &'a RawImageHeader,
     pub ptr: &'a [u8],
+}
+
+#[cfg(test)]
+mod test {
+    use std::println;
+
+// use crate::parser::chunk::get_tags;
+
+    // #[test]
+    // fn test_elems() {
+    //     let b: [u8; _] = [0x3, 0x0, 0xc, 0x2, 0x3];
+    //     // let (count, rest) = get_tags(&b);
+    //     println!("{:?}", count);
+
+    // }
 }
 
 #[cfg(feature = "embedded_graphics")]  

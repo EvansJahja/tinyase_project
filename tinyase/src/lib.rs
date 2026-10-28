@@ -1,4 +1,4 @@
-#![cfg_attr(not(test), no_std)]
+#![cfg_attr(all(not(test), not(feature="std")), no_std)]
 
 #![warn(
     // missing_docs,
@@ -23,14 +23,11 @@
 )]
 
 pub mod parser;
-pub use parser::ASEHeader;
+pub use parser::Header;
 
 #[cfg(feature = "embedded_graphics")]
 pub mod embedded_graphics;
 
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
 
 #[cfg(test)]
 mod tests {

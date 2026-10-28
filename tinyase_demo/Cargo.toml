@@ -9,6 +9,6 @@ license = "MIT OR Apache-2.0"
 [dependencies]
 pixels = "0.15.0"
 winit = "0.30.12"
-tinyase = { version = "0.1.0", path = "../tinyase"}
+tinyase = { version = "0.1.0", path = "../tinyase", features = ["std"]}
 tiny-skia = "0.11.4"
 clap = { version = "4.5.54", features = ["derive"] }

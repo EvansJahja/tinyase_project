@@ -16,3 +16,4 @@ zerocopy-derive = "0.8.31"
 
 [features]
 embedded_graphics = ["embedded-graphics"]
+std = []
