@@ -6,12 +6,12 @@ use crate::parser::prefix_string;
 #[derive(TryFromBytes, KnownLayout, Immutable, Debug, Unaligned)]
 #[repr(C)]
 pub struct TagInner {
-    from: U16,
-    to: U16,
-    loop_dir: u8,
-    repeat_times: U16,
+    pub from: U16,
+    pub to: U16,
+    pub loop_dir: u8,
+    pub repeat_times: U16,
     _res_1: [u8; 6],
-    tag_color: [u8;3],
+    pub tag_color: [u8;3],
     _res_2: u8,
 }
 

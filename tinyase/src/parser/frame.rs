@@ -56,7 +56,7 @@ pub struct ASEFrameHeader {
     num_bytes: u32,
     _magic: u16,
     old_unused: u16,
-    duration: u16,
+    pub duration: u16,
     _reserved: [u8; 2],
     num_chunks: u32,
 }
